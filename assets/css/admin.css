@@ -1,0 +1,83 @@
+:root {
+	--acpn-primary: #007f83;
+	--acpn-primary-bright: #00b9bd;
+	--acpn-primary-dark: #006a6d;
+	--acpn-navy: #173b57;
+	--acpn-body: #55708a;
+	--acpn-muted: #8197ad;
+	--acpn-border: #dde8ef;
+	--acpn-soft: #e9f8f8;
+	--acpn-white: #fff;
+}
+
+body.toplevel_page_acpn-partner-network { background: #f5f8fa; }
+.toplevel_page_acpn-partner-network #wpcontent { padding-left: 0; }
+.acpn-wrap { margin: 0; color: var(--acpn-navy); font-family: Vazirmatn, Tahoma, Arial, sans-serif; }
+.acpn-app { min-height: calc(100vh - 32px); background: #fff; overflow: hidden; }
+.acpn-header { position: sticky; top: 32px; z-index: 20; display: flex; align-items: center; justify-content: space-between; min-height: 88px; padding: 0 clamp(24px, 4vw, 56px); background: rgb(255 255 255 / 92%); border-bottom: 1px solid var(--acpn-border); box-shadow: 0 4px 18px rgb(23 59 87 / 5%); backdrop-filter: blur(14px); }
+.acpn-brand, .acpn-version { display: flex; align-items: center; gap: 14px; }
+.acpn-brand strong { font-size: 18px; font-weight: 700; }
+.acpn-logo { display: inline-flex; width: 56px; height: 40px; color: var(--acpn-primary-bright); }
+.acpn-logo svg { width: 100%; height: 100%; fill: currentColor; }
+.acpn-logo-facet { fill: none; stroke: rgb(255 255 255 / 44%); stroke-width: 1.4; }
+.acpn-version { color: var(--acpn-body); }
+.acpn-version bdi { padding: 8px 14px; color: var(--acpn-primary); background: var(--acpn-soft); border-radius: 10px; font-weight: 700; }
+.acpn-main { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: clamp(28px, 4vw, 64px); width: min(1480px, calc(100% - 64px)); margin: 0 auto; padding: 76px 0 70px; }
+.acpn-content { min-width: 0; max-width: 1120px; }
+.acpn-stepper { padding-top: 214px; }
+.acpn-stepper ol { position: relative; margin: 0; padding: 0; list-style: none; }
+.acpn-stepper ol::before { content: ""; position: absolute; top: 25px; right: 25px; bottom: 25px; width: 1px; background: var(--acpn-border); }
+.acpn-stepper li { position: relative; display: grid; grid-template-columns: 52px 1fr; align-items: center; gap: 14px; min-height: 74px; margin: 0; color: var(--acpn-muted); font-size: 15px; font-weight: 600; }
+.acpn-stepper li::after { content: ""; position: absolute; top: 9px; right: -14px; width: 4px; height: 42px; border-radius: 4px; background: transparent; }
+.acpn-stepper li.is-active { color: var(--acpn-primary); }
+.acpn-stepper li.is-active::after { background: var(--acpn-primary-bright); }
+.acpn-step-icon { z-index: 1; display: grid; place-items: center; width: 48px; height: 48px; background: #fff; border: 1px solid var(--acpn-border); border-radius: 50%; }
+.acpn-step-icon svg { width: 22px; height: 22px; }
+.is-active .acpn-step-icon { color: var(--acpn-primary); border-color: #9ee2e4; box-shadow: 0 0 0 5px rgb(0 185 189 / 7%); }
+.acpn-mobile-progress { display: none; }
+.acpn-hero { position: relative; display: grid; place-items: center; min-height: 310px; isolation: isolate; }
+.acpn-hero-copy { z-index: 2; max-width: 780px; text-align: center; }
+.acpn-eyebrow { display: inline-block; margin-bottom: 18px; padding: 7px 13px; color: var(--acpn-primary); background: rgb(233 248 248 / 82%); border: 1px solid rgb(0 185 189 / 14%); border-radius: 999px; font-size: 13px; font-weight: 700; }
+.acpn-hero h1 { margin: 0; color: var(--acpn-navy); font-size: clamp(32px, 3.2vw, 48px); font-weight: 800; line-height: 1.45; letter-spacing: -.7px; }
+.acpn-hero p { max-width: 650px; margin: 22px auto 0; color: var(--acpn-body); font-size: 18px; line-height: 2; }
+.acpn-glow { position: absolute; z-index: -1; border-radius: 50%; filter: blur(66px); opacity: .5; pointer-events: none; }
+.acpn-glow-cyan { top: 12px; right: 27%; width: 330px; height: 245px; background: #62dce1; transform: rotate(18deg); }
+.acpn-glow-pink { top: 16px; left: 27%; width: 190px; height: 220px; background: #f67fb5; opacity: .38; }
+.acpn-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 38px; margin-top: 44px; }
+.acpn-card { position: relative; min-height: 220px; padding: 32px 24px; text-align: center; background: #fff; border: 1px solid var(--acpn-border); border-radius: 16px; box-shadow: 0 8px 28px rgb(23 59 87 / 7%); transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease; box-sizing: border-box; }
+.acpn-card:hover { transform: translateY(-3px); border-color: #9ee2e4; box-shadow: 0 14px 34px rgb(23 59 87 / 11%); }
+.acpn-card-number { position: absolute; top: 16px; right: 16px; display: grid; place-items: center; width: 30px; height: 30px; color: #fff; background: var(--acpn-primary); border-radius: 50%; font-weight: 700; }
+.acpn-card-icon { display: grid; place-items: center; width: 68px; height: 68px; margin: 0 auto 21px; color: var(--acpn-primary); background: var(--acpn-soft); border-radius: 50%; }
+.acpn-card-icon svg { width: 31px; height: 31px; }
+.acpn-card h2 { margin: 0 0 12px; color: var(--acpn-navy); font-size: 18px; line-height: 1.6; }
+.acpn-card p { margin: 0; color: var(--acpn-body); font-size: 14px; line-height: 1.9; }
+.acpn-card-connector { position: absolute; top: 50%; left: -39px; width: 38px; height: 1px; background: var(--acpn-primary-bright); }
+.acpn-card-connector::before, .acpn-card-connector::after { content: ""; position: absolute; top: -4px; width: 8px; height: 8px; background: #fff; border: 1px solid var(--acpn-primary-bright); border-radius: 50%; }
+.acpn-card-connector::before { right: -1px; }.acpn-card-connector::after { left: -1px; }
+.acpn-actions { display: flex; align-items: center; justify-content: center; gap: 30px; margin-top: 42px; }
+.acpn-actions form { margin: 0; }
+.acpn-button { display: inline-flex; align-items: center; justify-content: center; gap: 14px; min-height: 56px; padding: 0 28px; border: 0; border-radius: 12px; font: inherit; font-size: 16px; font-weight: 700; text-decoration: none; cursor: pointer; transition: transform .18s ease, box-shadow .18s ease, background .18s ease, color .18s ease; box-sizing: border-box; }
+.acpn-button-primary { min-width: 264px; color: #fff; background: var(--acpn-primary); box-shadow: 0 12px 24px rgb(0 127 131 / 19%); }
+.acpn-button-primary:hover, .acpn-button-primary:focus { color: #fff; background: var(--acpn-primary-dark); transform: translateY(-2px); box-shadow: 0 15px 28px rgb(0 106 109 / 24%); }
+.acpn-button:focus-visible { outline: 3px solid rgb(0 127 131 / 25%); outline-offset: 3px; }
+.acpn-button-link { min-height: 48px; color: var(--acpn-primary); }
+.acpn-button-link:hover { color: var(--acpn-primary-dark); }
+
+@media (max-width: 1100px) {
+	.acpn-main { grid-template-columns: 1fr; width: min(920px, calc(100% - 48px)); padding-top: 44px; }
+	.acpn-stepper { order: 0; padding: 0; }.acpn-content { order: 1; }
+	.acpn-stepper ol { display: grid; grid-template-columns: repeat(4, 1fr); }
+	.acpn-stepper ol::before { top: 24px; right: 12.5%; bottom: auto; left: 12.5%; width: auto; height: 1px; }
+	.acpn-stepper li { grid-template-columns: 1fr; justify-items: center; gap: 8px; text-align: center; }
+	.acpn-stepper li::after { display: none; }
+}
+@media (max-width: 782px) {
+	.acpn-header { top: 46px; min-height: 74px; padding: 0 20px; }.acpn-brand strong { font-size: 14px; }.acpn-logo { width: 43px; }.acpn-version span { display: none; }
+	.acpn-main { width: calc(100% - 32px); padding: 28px 0 44px; }
+	.acpn-stepper ol { display: none; }.acpn-mobile-progress { display: flex; justify-content: space-between; padding: 14px 16px; color: var(--acpn-body); background: #f7fbfc; border: 1px solid var(--acpn-border); border-radius: 12px; }.acpn-mobile-progress strong { color: var(--acpn-primary); }
+	.acpn-hero { min-height: 270px; }.acpn-hero h1 { font-size: 30px; }.acpn-hero p { font-size: 16px; }.acpn-glow-cyan { right: 10%; width: 260px; }.acpn-glow-pink { left: 10%; }
+	.acpn-cards { grid-template-columns: 1fr; gap: 18px; margin-top: 30px; }.acpn-card { min-height: 200px; }.acpn-card-connector { display: none; }
+	.acpn-actions { flex-direction: column; gap: 10px; }.acpn-actions form, .acpn-button { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) { .acpn-card, .acpn-button { transition: none; } }
+
