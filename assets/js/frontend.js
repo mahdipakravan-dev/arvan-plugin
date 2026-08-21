@@ -3,6 +3,7 @@
 
   function initializePhoneAuth(form) {
     var config = window.acrPhoneAuth;
+    var requestId = '';
     var phoneStep = form.querySelector('.acr-phone-auth__phone');
     var otpStep = form.querySelector('.acr-phone-auth__otp');
     var phoneInput = form.elements.phone;
@@ -59,15 +60,26 @@
           phoneInput.focus();
           return;
         }
-        showStep('otp');
-        setMessage('کد آزمایشی 1111 را وارد کنید.', false, false);
-        setBusy(false);
-        otpInput.focus();
+        setMessage('در حال ارسال درخواست کد ورود…', false, true);
+        post('acr_request_otp', { phone: phoneInput.value }).then(function (result) {
+          if (!result.success) {
+            throw new Error(result.data && result.data.message ? result.data.message : 'ارسال کد ورود ناموفق بود.');
+          }
+          requestId = result.data.requestId || '';
+          showStep('otp');
+          setMessage(result.data.message || 'کد ورود ارسال شد.', false, false);
+          setBusy(false);
+          otpInput.focus();
+        }).catch(function (error) {
+          setMessage(error.message, true, false);
+          setBusy(false);
+          phoneInput.focus();
+        });
         return;
       }
 
       setMessage('در حال بررسی کد و ورود به سیستم…', false, true);
-      post('acr_verify_otp', { phone: phoneInput.value, otp: otpInput.value, redirect: config.redirect }).then(function (result) {
+      post('acr_verify_otp', { phone: phoneInput.value, otp: otpInput.value, requestId: requestId, redirect: config.redirect }).then(function (result) {
         if (!result.success) {
           throw new Error(result.data && result.data.message ? result.data.message : 'ورود ناموفق بود.');
         }
@@ -80,6 +92,7 @@
     });
 
     form.querySelector('.acr-auth-back').addEventListener('click', function () {
+      requestId = '';
       otpInput.value = '';
       showStep('phone');
       setMessage('', false, false);

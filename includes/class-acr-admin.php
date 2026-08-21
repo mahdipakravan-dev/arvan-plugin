@@ -104,10 +104,12 @@ final class ACR_Admin
 		self::guard('acr_save_settings');
 		$old_interval = ACR_Catalog::interval_minutes();
 		$api_mode = sanitize_key(wp_unslash($_POST['api_mode'] ?? 'demo'));
+		$sms_provider = sanitize_key(wp_unslash($_POST['sms_provider'] ?? 'mock'));
 		$fields = array(
 			'organization_name' => sanitize_text_field(wp_unslash($_POST['organization_name'] ?? '')),
 			'machine_user_id' => sanitize_text_field(wp_unslash($_POST['machine_user_id'] ?? '')),
 			'api_mode' => in_array($api_mode, array('demo', 'live'), true) ? $api_mode : 'demo',
+			'sms_provider' => in_array($sms_provider, array('mock'), true) ? $sms_provider : 'mock',
 			'markup_percent' => (string) min(20, max(0, (float) wp_unslash($_POST['markup_percent'] ?? '10'))),
 			'default_threshold' => (string) max(0, (float) wp_unslash($_POST['default_threshold'] ?? '50000')),
 			'demo_hourly_cost' => (string) max(0, (float) wp_unslash($_POST['demo_hourly_cost'] ?? '1200')),
@@ -1244,6 +1246,15 @@ final class ACR_Admin
 										value="<?php echo esc_attr((string) ACR_Settings::get('cloud_regions', 'ir-thr-c2')); ?>"
 										placeholder="ir-thr-c2,ir-tbz-sh1"><small>چند Region را با کاما جدا
 										کنید.</small></label></div>
+						</div>
+						<div class="acr-form-section">
+							<div>
+								<h2>SMS Provider</h2>
+								<p>ارسال و اعتبارسنجی OTP از این بخش کنترل می‌شود و به حالت دمو وابسته نیست.</p>
+							</div>
+							<div class="acr-fields"><label>ارائه‌دهنده پیامک<select name="sms_provider">
+										<option value="mock" <?php selected(ACR_Settings::get('sms_provider', 'mock'), 'mock'); ?>>Mock OTP (1111)</option>
+									</select><small>OTP آزمایشی همیشه با کد ۱۱۱۱ فعال می‌ماند تا زمانی که ارائه‌دهنده واقعی اضافه شود.</small></label></div>
 						</div>
 						<div class="acr-form-section">
 							<div>

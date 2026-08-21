@@ -10,6 +10,7 @@ defined( 'ABSPATH' ) || exit;
 final class ACR_OTP {
 	private const EXPIRES_IN   = 300;
 	private const MAX_ATTEMPTS = 5;
+	private const DEMO_OTP     = '1111';
 
 	public static function init(): void {
 		add_action( 'wp_ajax_nopriv_acr_request_otp', array( __CLASS__, 'request' ) );
@@ -22,6 +23,10 @@ final class ACR_OTP {
 		if ( false === check_ajax_referer( 'acr_phone_login', 'nonce', false ) ) {
 			ACR_Audit::log( 'auth', 'otp_request', 'failed', __( 'OTP request nonce validation failed.', 'arvancloud-reseller' ) );
 			wp_send_json_error( array( 'message' => __( 'نشست صفحه منقضی شده است؛ صفحه را تازه‌سازی کنید.', 'arvancloud-reseller' ) ), 403 );
+		}
+		if ( ! self::is_mock_provider_enabled() ) {
+			ACR_Audit::log( 'auth', 'otp_request', 'blocked', __( 'Mock OTP login is disabled for the configured SMS provider.', 'arvancloud-reseller' ) );
+			wp_send_json_error( array( 'message' => __( 'ارائه‌دهنده پیامکِ تنظیم‌شده از OTP آزمایشی پشتیبانی نمی‌کند.', 'arvancloud-reseller' ) ), 403 );
 		}
 		$phone = self::normalize_phone( wp_unslash( $_POST['phone'] ?? '' ) );
 		if ( '' === $phone ) {
@@ -43,12 +48,11 @@ final class ACR_OTP {
 		set_transient( $ip_rate_key, $ip_requests + 1, HOUR_IN_SECONDS );
 
 		$request_id = wp_generate_password( 32, false, false );
-		$otp        = '1111';
 		set_transient(
 			'acr_otp_' . $request_id,
 			array(
 				'phone'    => $phone,
-				'hash'     => wp_hash_password( $otp ),
+				'hash'     => wp_hash_password( self::DEMO_OTP ),
 				'attempts' => 0,
 			),
 			self::EXPIRES_IN
@@ -60,9 +64,8 @@ final class ACR_OTP {
 			'requestId'  => $request_id,
 			'expiresIn'  => self::EXPIRES_IN,
 			'maskedPhone' => self::mask_phone( $phone ),
-			'demoOtp'    => $otp,
 		);
-		ACR_Audit::log( 'auth', 'otp_sent_mock', 'success', __( 'Mock OTP 1111 generated.', 'arvancloud-reseller' ), array( 'phone' => self::mask_phone( $phone ), 'request_id' => $request_id ) );
+		ACR_Audit::log( 'auth', 'otp_sent_mock', 'success', __( 'Mock OTP generated for a login request.', 'arvancloud-reseller' ), array( 'phone' => self::mask_phone( $phone ), 'request_id' => $request_id ) );
 		wp_send_json_success( $data );
 	}
 
@@ -71,11 +74,20 @@ final class ACR_OTP {
 			ACR_Audit::log( 'auth', 'otp_verify', 'failed', __( 'OTP verification nonce validation failed.', 'arvancloud-reseller' ) );
 			wp_send_json_error( array( 'message' => __( 'نشست صفحه منقضی شده است؛ صفحه را تازه‌سازی کنید.', 'arvancloud-reseller' ) ), 403 );
 		}
+		if ( ! self::is_mock_provider_enabled() ) {
+			ACR_Audit::log( 'auth', 'otp_verify', 'blocked', __( 'Mock OTP verification is disabled for the configured SMS provider.', 'arvancloud-reseller' ) );
+			wp_send_json_error( array( 'message' => __( 'ارائه‌دهنده پیامکِ تنظیم‌شده از OTP آزمایشی پشتیبانی نمی‌کند.', 'arvancloud-reseller' ) ), 403 );
+		}
 		$phone = self::normalize_phone( wp_unslash( $_POST['phone'] ?? '' ) );
 		$otp   = preg_replace( '/\D+/', '', self::latin_digits( wp_unslash( $_POST['otp'] ?? '' ) ) );
+		$request_id = sanitize_text_field( wp_unslash( $_POST['requestId'] ?? '' ) );
 		if ( '' === $phone ) {
 			ACR_Audit::log( 'auth', 'otp_verify', 'failed', __( 'Invalid phone number.', 'arvancloud-reseller' ) );
 			wp_send_json_error( array( 'message' => __( 'شماره موبایل معتبر نیست؛ شماره را اصلاح کنید.', 'arvancloud-reseller' ) ), 400 );
+		}
+		if ( '' === $request_id ) {
+			ACR_Audit::log( 'auth', 'otp_verify', 'failed', __( 'OTP request identifier missing.', 'arvancloud-reseller' ), array( 'phone' => self::mask_phone( $phone ) ) );
+			wp_send_json_error( array( 'message' => __( 'درخواست کد ورود یافت نشد؛ دوباره کد دریافت کنید.', 'arvancloud-reseller' ) ), 400 );
 		}
 
 		$attempt_key = 'acr_otp_attempts_' . hash_hmac( 'sha256', $phone . '|' . self::client_ip(), wp_salt( 'nonce' ) );
@@ -84,14 +96,24 @@ final class ACR_OTP {
 			ACR_Audit::log( 'auth', 'otp_verify', 'blocked', __( 'Maximum OTP attempts reached.', 'arvancloud-reseller' ), array( 'phone' => self::mask_phone( $phone ) ) );
 			wp_send_json_error( array( 'message' => __( 'تعداد تلاش بیش از حد مجاز بود؛ کد جدید دریافت کنید.', 'arvancloud-reseller' ) ), 429 );
 		}
-		if ( '1111' !== $otp ) {
+		$request = get_transient( 'acr_otp_' . $request_id );
+		if ( ! is_array( $request ) || empty( $request['phone'] ) || empty( $request['hash'] ) ) {
+			ACR_Audit::log( 'auth', 'otp_verify', 'failed', __( 'OTP request expired or was not found.', 'arvancloud-reseller' ), array( 'phone' => self::mask_phone( $phone ), 'request_id' => $request_id ) );
+			wp_send_json_error( array( 'message' => __( 'کد ورود منقضی شده است؛ دوباره کد دریافت کنید.', 'arvancloud-reseller' ) ), 410 );
+		}
+		if ( ! hash_equals( (string) $request['phone'], $phone ) ) {
+			ACR_Audit::log( 'auth', 'otp_verify', 'failed', __( 'OTP verification phone mismatch detected.', 'arvancloud-reseller' ), array( 'request_id' => $request_id ) );
+			wp_send_json_error( array( 'message' => __( 'شماره موبایل با درخواست کد مطابقت ندارد.', 'arvancloud-reseller' ) ), 400 );
+		}
+		if ( ! wp_check_password( $otp, (string) $request['hash'] ) ) {
 			set_transient( $attempt_key, $attempts + 1, 15 * MINUTE_IN_SECONDS );
-			ACR_Audit::log( 'auth', 'otp_verify', 'failed', __( 'Incorrect mock OTP.', 'arvancloud-reseller' ), array( 'phone' => self::mask_phone( $phone ), 'attempt' => $attempts + 1 ) );
+			ACR_Audit::log( 'auth', 'otp_verify', 'failed', __( 'Incorrect mock OTP.', 'arvancloud-reseller' ), array( 'phone' => self::mask_phone( $phone ), 'attempt' => $attempts + 1, 'request_id' => $request_id ) );
 			wp_send_json_error( array( 'message' => __( 'کد واردشده صحیح نیست.', 'arvancloud-reseller' ) ), 401 );
 		}
 
+		delete_transient( 'acr_otp_' . $request_id );
 		delete_transient( $attempt_key );
-		ACR_Audit::log( 'auth', 'otp_sent_mock', 'success', __( 'Mock OTP 1111 accepted for verification.', 'arvancloud-reseller' ), array( 'phone' => self::mask_phone( $phone ) ) );
+		ACR_Audit::log( 'auth', 'otp_verify', 'success', __( 'Mock OTP request validated successfully.', 'arvancloud-reseller' ), array( 'phone' => self::mask_phone( $phone ), 'request_id' => $request_id ) );
 		$user = self::user_for_phone( $phone );
 		if ( is_wp_error( $user ) ) {
 			ACR_Audit::log( 'auth', 'user_registration', 'failed', $user->get_error_message(), array( 'phone' => self::mask_phone( $phone ) ) );
@@ -175,6 +197,10 @@ final class ACR_OTP {
 
 	private static function client_ip(): string {
 		return sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ?? 'unknown' ) );
+	}
+
+	private static function is_mock_provider_enabled(): bool {
+		return 'mock' === ACR_Settings::get( 'sms_provider', 'mock' );
 	}
 
 	private static function safe_redirect_url( mixed $url ): string {
