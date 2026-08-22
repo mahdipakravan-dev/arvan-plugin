@@ -322,6 +322,14 @@ final class ACR_API {
 		);
 	}
 
+	public static function list_cdn_plans( array $query = array() ): array {
+		$url = self::CDN_BASE . '/plans';
+		if ( $query ) {
+			$url = add_query_arg( $query, $url );
+		}
+		return self::request_url( 'GET', $url );
+	}
+
 	public static function restrict_resource( object $resource, string $action ): bool {
 		if ( 'demo' === ACR_Settings::get( 'api_mode', 'demo' ) ) {
 			return true;
@@ -352,7 +360,7 @@ final class ACR_API {
 			'redirection' => 2,
 			'headers'     => array(
 				'Accept'        => 'application/json',
-				'Authorization' => $token,
+				'Authorization' => self::authorization_header( $token ),
 				'Content-Type'  => 'application/json',
 			),
 		);
@@ -400,5 +408,13 @@ final class ACR_API {
 			),
 			'response' => $response,
 		);
+	}
+
+	private static function authorization_header( string $token ): string {
+		$token = trim( $token );
+		if ( preg_match( '/^(?:Bearer|apikey)\s+/i', $token ) ) {
+			return $token;
+		}
+		return 'apikey ' . $token;
 	}
 }

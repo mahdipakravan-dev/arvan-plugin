@@ -11,6 +11,7 @@ final class ACR_Catalog {
 	public const API_URL = 'https://www.arvancloud.ir/fa/dev/api';
 	public const PRICING_URL = 'https://www.arvancloud.ir/fa/pricing';
 	public const TERMINATION_URL = 'https://www.arvancloud.ir/fa/legal/service-termination';
+	public const PLAN_API_URL = 'https://napi.arvancloud.ir/cdn/4.0/plans';
 	private const CRON_HOOK = 'acr_catalog_sync';
 	private const CRON_SCHEDULE = 'acr_catalog_interval';
 
@@ -72,37 +73,51 @@ final class ACR_Catalog {
 	}
 
 	public static function sync(): array {
-		$sources = array(
-			'api'         => self::fetch( self::API_URL ),
-			'termination' => self::fetch( self::TERMINATION_URL ),
+		$plan_result = ACR_API::list_cdn_plans();
+		$sources     = array(
+			'plans' => self::plan_source_summary( $plan_result ),
 		);
-		$product_sources = array();
-		foreach ( self::definitions() as $slug => $product ) {
-			$product_sources[ $slug ] = self::fetch( $product['source_url'] );
-		}
-		$sources['pricing'] = self::pricing_source_summary( $product_sources );
 		$updated = 0;
 		$error   = '';
 
 		foreach ( self::definitions() as $slug => $product ) {
-			$pricing = $product_sources[ $slug ];
-			if ( ! $pricing['success'] ) {
-				continue;
+			if ( 'cdn' === $slug ) {
+				$plans = self::extract_plan_catalog( $plan_result['data'] ?? array() );
+				if ( $plan_result['success'] && $plans ) {
+					$label = self::headline_plan_price( $plans, $product['fallback_price'] );
+					self::upsert(
+						$slug,
+						$product,
+						$label,
+						array(
+							'currency' => self::plan_currency( $plan_result['data'] ?? array() ),
+							'plans'    => $plans,
+						),
+						'official',
+						hash( 'sha256', wp_json_encode( $plan_result['data'] ) )
+					);
+					++$updated;
+					continue;
+				}
+
+				if ( empty( $plan_result['success'] ) ) {
+					continue;
+				}
 			}
 
-			$section = self::html_text( $pricing['body'] );
-			$prices  = self::extract_prices( $section );
-			if ( ! $prices ) {
-				continue;
-			}
-
-			$label = self::headline_price( $slug, $prices, $product['fallback_price'] );
-			self::upsert( $slug, $product, $label, $prices, 'official', hash( 'sha256', $section ) );
+			self::upsert(
+				$slug,
+				$product,
+				$product['fallback_price'],
+				array(),
+				'fallback',
+				''
+			);
 			++$updated;
 		}
 
-		if ( 0 === $updated ) {
-			$error = $sources['pricing']['message'] ?: __( 'ساختار صفحه قیمت تغییر کرده است؛ آخرین کاتالوگ معتبر حفظ شد.', 'arvancloud-reseller' );
+		if ( empty( $plan_result['success'] ) ) {
+			$error = $sources['plans']['message'] ?: __( 'دریافت پلن‌های CDN از API ناموفق بود؛ آخرین کاتالوگ معتبر حفظ شد.', 'arvancloud-reseller' );
 			self::seed_defaults();
 		}
 
@@ -113,7 +128,7 @@ final class ACR_Catalog {
 				'success' => (bool) $source['success'],
 				'status'  => absint( $source['status'] ?? 0 ),
 				'url'     => $source['url'],
-				'hash'    => $source['success'] ? hash( 'sha256', $source['body'] ) : '',
+				'hash'    => sanitize_text_field( (string) ( $source['hash'] ?? '' ) ),
 				'message' => sanitize_text_field( (string) ( $source['message'] ?? '' ) ),
 			);
 			$diagnostics[] = array(
@@ -121,74 +136,40 @@ final class ACR_Catalog {
 				'request'  => array(
 					'method'   => 'GET',
 					'endpoint' => $source['url'],
-					'headers'  => array( 'Accept' => 'text/html,application/xhtml+xml' ),
+					'headers'  => array( 'Accept' => 'application/json' ),
 				),
 				'response' => array(
 					'success'      => (bool) $source['success'],
 					'status'       => absint( $source['status'] ?? 0 ),
 					'message'      => sanitize_text_field( (string) ( $source['message'] ?? '' ) ),
-					'body_excerpt' => function_exists( 'mb_substr' ) ? mb_substr( (string) $source['body'], 0, 4000 ) : substr( (string) $source['body'], 0, 4000 ),
+					'body_excerpt' => function_exists( 'mb_substr' ) ? mb_substr( (string) ( $source['body'] ?? '' ), 0, 4000 ) : substr( (string) ( $source['body'] ?? '' ), 0, 4000 ),
 				),
 			);
 		}
 
-		$termination_text = $sources['termination']['success'] ? self::html_text( $sources['termination']['body'] ) : '';
-		$policy_date = '';
-		if ( preg_match( '/آخرین تاریخ به.?روزرسانی\s*[:：]?\s*([^\n]{3,40})/u', $termination_text, $match ) ) {
-			$policy_date = sanitize_text_field( trim( $match[1] ) );
-		}
-
 		ACR_Settings::set( 'catalog_source_status', wp_json_encode( $status ) );
 		ACR_Settings::set( 'catalog_last_sync', current_time( 'mysql', true ) );
-		ACR_Settings::set( 'termination_policy_date', $policy_date );
+		ACR_Settings::set( 'termination_policy_date', '' );
 		ACR_Settings::set( 'catalog_last_error', $error );
 
-		return array( 'success' => $updated > 0, 'updated' => $updated, 'sources' => $status, 'message' => $error, 'diagnostics' => $diagnostics );
-	}
-
-	private static function fetch( string $url ): array {
-		$response = wp_safe_remote_get(
-			$url,
-			array(
-				'timeout'             => 25,
-				'redirection'         => 3,
-				'limit_response_size' => 4 * MB_IN_BYTES,
-				'user-agent'          => 'Mozilla/5.0 (compatible; ArvanCloud-Reseller/' . ACR_VERSION . '; +' . home_url( '/' ) . ')',
-				'headers'             => array(
-					'Accept'          => 'text/html,application/xhtml+xml',
-					'Accept-Language' => 'fa-IR,fa;q=0.9,en;q=0.7',
-				),
-			)
-		);
-		if ( is_wp_error( $response ) ) {
-			return array( 'success' => false, 'status' => 0, 'body' => '', 'message' => $response->get_error_message(), 'url' => $url );
-		}
-		$status       = wp_remote_retrieve_response_code( $response );
-		$body         = wp_remote_retrieve_body( $response );
-		$is_challenge = preg_match( '/در\s*حال\s*انتقال|Transferring to the website/iu', self::html_text( $body ) );
-		$success      = $status >= 200 && $status < 400 && '' !== trim( $body ) && ! $is_challenge;
 		return array(
-			'success' => $success,
-			'status'  => $status,
-			'body'    => $body,
-			'message' => $is_challenge ? __( 'صفحه قیمت به صفحه انتقال موقت هدایت شد؛ بعداً دوباره تلاش کنید.', 'arvancloud-reseller' ) : ( $status >= 200 && $status < 400 ? '' : sprintf( __( 'پاسخ HTTP %d', 'arvancloud-reseller' ), $status ) ),
-			'url'     => $url,
+			'success'     => ! empty( $plan_result['success'] ),
+			'updated'     => $updated,
+			'sources'     => $status,
+			'message'     => $error,
+			'diagnostics' => $diagnostics,
 		);
 	}
 
-	private static function pricing_source_summary( array $product_sources ): array {
-		$successful = array_filter(
-			$product_sources,
-			static fn( array $source ): bool => (bool) $source['success']
-		);
-		$failed = array_diff_key( $product_sources, $successful );
-		$bodies = array_column( $successful, 'body' );
+	private static function plan_source_summary( array $result ): array {
+		$body = wp_json_encode( $result['data'] ?? array(), JSON_UNESCAPED_UNICODE );
 		return array(
-			'success' => count( $successful ) === count( $product_sources ),
-			'status'  => $failed ? absint( reset( $failed )['status'] ?? 0 ) : 200,
-			'body'    => implode( "\n", $bodies ),
-			'message' => $failed ? __( 'دریافت یک یا چند صفحه قیمت محصول ناموفق بود.', 'arvancloud-reseller' ) : '',
-			'url'     => self::PRICING_URL,
+			'success' => (bool) ( $result['success'] ?? false ),
+			'status'  => absint( $result['status'] ?? 0 ),
+			'body'    => $body ?: '',
+			'message' => sanitize_text_field( (string) ( $result['message'] ?? '' ) ),
+			'url'     => self::PLAN_API_URL,
+			'hash'    => $body ? hash( 'sha256', $body ) : '',
 		);
 	}
 
@@ -198,18 +179,14 @@ final class ACR_Catalog {
 				'name'           => __( 'شبکه توزیع محتوا (CDN)', 'arvancloud-reseller' ),
 				'description'    => __( 'افزایش سرعت، امنیت و پایداری وب‌سایت با پرداخت مبتنی بر مصرف.', 'arvancloud-reseller' ),
 				'icon'           => 'dashicons-admin-site-alt3',
-				'start'          => 'شبکه توزیع محتوا (CDN)',
-				'end'            => 'سرور ابری',
 				'fallback_price' => __( 'شروع از رایگان', 'arvancloud-reseller' ),
 				'purchasable'    => true,
-				'source_url'     => self::PRICING_URL . '/cdn',
+				'source_url'     => self::API_URL,
 			),
 			'cloud-server' => array(
 				'name'           => __( 'سرور ابری', 'arvancloud-reseller' ),
 				'description'    => __( 'منابع پردازشی منعطف با محاسبه هزینه ساعتی و ماهانه.', 'arvancloud-reseller' ),
 				'icon'           => 'dashicons-cloud',
-				'start'          => 'سرور ابری',
-				'end'            => 'فضای ابری',
 				'fallback_price' => __( 'قیمت‌گذاری براساس منابع', 'arvancloud-reseller' ),
 				'purchasable'    => true,
 				'source_url'     => self::PRICING_URL . '/cloud-server',
@@ -218,8 +195,6 @@ final class ACR_Catalog {
 				'name'           => __( 'فضای ابری', 'arvancloud-reseller' ),
 				'description'    => __( 'ذخیره‌سازی سازگار با S3 برای فایل‌ها و داده‌های حجیم.', 'arvancloud-reseller' ),
 				'icon'           => 'dashicons-database',
-				'start'          => 'فضای ابری',
-				'end'            => 'پلتفرم ویدیو',
 				'fallback_price' => __( 'شروع از رایگان', 'arvancloud-reseller' ),
 				'purchasable'    => false,
 				'source_url'     => self::PRICING_URL . '/cloud-storage',
@@ -227,52 +202,71 @@ final class ACR_Catalog {
 		);
 	}
 
-	private static function html_text( string $html ): string {
-		$html = preg_replace( '#<(script|style|svg|noscript)[^>]*>.*?</\1>#isu', ' ', $html );
-		$text = html_entity_decode( wp_strip_all_tags( (string) $html, true ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
-		$text = preg_replace( '/[\x{200c}\x{200f}\x{202a}-\x{202e}]/u', '', $text );
-		return trim( (string) preg_replace( '/[\t ]+/u', ' ', preg_replace( '/\R+/u', "\n", (string) $text ) ) );
-	}
-
-	private static function find_priced_section( string $text, string $start, string $end ): string {
-		$offset = 0;
-		while ( false !== ( $position = strpos( $text, $start, $offset ) ) ) {
-			$after = $position + strlen( $start );
-			$finish = strpos( $text, $end, $after );
-			if ( false === $finish ) {
-				break;
-			}
-			$section = substr( $text, $after, $finish - $after );
-			if ( strlen( $section ) > 150 && preg_match( '/تومان|رایگان/u', $section ) ) {
-				return $section;
-			}
-			$offset = $after;
-		}
-		return '';
-	}
-
-	private static function extract_prices( string $section ): array {
-		if ( '' === $section ) {
+	private static function extract_plan_catalog( array $payload ): array {
+		$plans = $payload['data']['plans'] ?? $payload['plans'] ?? array();
+		if ( ! is_array( $plans ) ) {
 			return array();
 		}
-		preg_match_all( '/(?:رایگان|[۰-۹0-9][۰-۹0-9٬,٫\.]*\s*تومان)/u', $section, $matches );
-		$prices = array_values( array_unique( array_map( 'sanitize_text_field', $matches[0] ?? array() ) ) );
-		return array_slice( $prices, 0, 8 );
+
+		$out = array();
+		foreach ( $plans as $plan ) {
+			if ( ! is_array( $plan ) ) {
+				continue;
+			}
+
+			$out[] = array(
+				'key'            => sanitize_key( (string) ( $plan['key'] ?? '' ) ),
+				'name'           => sanitize_text_field( (string) ( $plan['name'] ?? '' ) ),
+				'monthly_cost'   => (float) ( $plan['monthly_cost'] ?? 0 ),
+				'discount'       => (float) ( $plan['discount'] ?? 0 ),
+				'needed_balance' => (float) ( $plan['needed_balance'] ?? 0 ),
+			);
+		}
+
+		return array_values(
+			array_filter(
+				$out,
+				static fn( array $plan ): bool => '' !== $plan['name'] || '' !== $plan['key']
+			)
+		);
 	}
 
-	private static function headline_price( string $slug, array $prices, string $fallback ): string {
-		if ( ! $prices ) {
+	private static function plan_currency( array $payload ): array {
+		$currency = $payload['data']['currency'] ?? $payload['currency'] ?? array();
+		return array(
+			'key'   => sanitize_key( (string) ( $currency['key'] ?? '' ) ),
+			'label' => sanitize_text_field( (string) ( $currency['label'] ?? '' ) ),
+		);
+	}
+
+	private static function headline_plan_price( array $plans, string $fallback ): string {
+		if ( ! $plans ) {
 			return $fallback;
 		}
-		if ( in_array( $slug, array( 'cdn', 'object-storage' ), true ) && in_array( 'رایگان', $prices, true ) ) {
+
+		$monthly_costs = array_map(
+			static fn( array $plan ): float => (float) $plan['monthly_cost'],
+			$plans
+		);
+		$positive_costs = array_values(
+			array_filter(
+				$monthly_costs,
+				static fn( float $cost ): bool => $cost > 0
+			)
+		);
+
+		if ( ! $positive_costs && min( $monthly_costs ) <= 0 ) {
 			return __( 'شروع از رایگان', 'arvancloud-reseller' );
 		}
-		foreach ( $prices as $price ) {
-			if ( 'رایگان' !== $price ) {
-				return sprintf( __( 'از %s', 'arvancloud-reseller' ), $price );
-			}
+
+		if ( ! $positive_costs ) {
+			return $fallback;
 		}
-		return $fallback;
+
+		return sprintf(
+			__( 'از %s در ماه', 'arvancloud-reseller' ),
+			number_format_i18n( min( $positive_costs ) )
+		);
 	}
 
 	private static function upsert( string $slug, array $product, string $price_label, array $prices, string $source_state, string $source_hash ): void {

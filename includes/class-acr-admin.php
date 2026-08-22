@@ -806,9 +806,9 @@ final class ACR_Admin
 								class="dashicons dashicons-update"></span>همگام‌سازی همین حالا</button></form>
 				</div>
 				<div class="acr-source-grid">
-					<?php self::source_card('مستندات API', ACR_Catalog::API_URL, $status['api'] ?? array()); ?>
-					<?php self::source_card('قیمت‌گذاری محصولات', ACR_Catalog::PRICING_URL, $status['pricing'] ?? array()); ?>
-					<?php self::source_card('شرایط قطع سرویس', ACR_Catalog::TERMINATION_URL, $status['termination'] ?? array()); ?>
+					<?php self::source_card('مستندات API', ACR_Catalog::API_URL, array('success' => true, 'message' => 'مرجع فنی برای پلن‌ها')); ?>
+					<?php self::source_card('CDN Plans API', ACR_Catalog::PLAN_API_URL, $status['plans'] ?? array()); ?>
+					<?php self::source_card('صفحه قیمت عمومی', ACR_Catalog::PRICING_URL, array('success' => true, 'message' => 'برای دو محصول دیگر فقط لینک مرجع نمایش داده می‌شود.')); ?>
 				</div>
 				<section class="acr-panel acr-catalog-table">
 					<div class="acr-panel-head">
@@ -826,6 +826,7 @@ final class ACR_Admin
 								<tr>
 									<th>محصول</th>
 									<th>قیمت نمایشی</th>
+									<th>جزئیات پلن/قیمت</th>
 									<th>وضعیت منبع</th>
 									<th>قابل سفارش</th>
 									<th>آخرین دریافت</th>
@@ -836,6 +837,7 @@ final class ACR_Admin
 										<td><strong><?php echo esc_html($product['name']); ?></strong><small
 												dir="ltr"><?php echo esc_html($product['slug']); ?></small></td>
 										<td><?php echo esc_html($product['price_label']); ?></td>
+										<td><?php self::catalog_price_details($product); ?></td>
 										<td><span
 												class="acr-status <?php echo 'official' === $product['source_state'] ? 'is-active' : ''; ?>"><?php echo esc_html($product['source_state']); ?></span>
 										</td>
@@ -868,6 +870,27 @@ final class ACR_Admin
 					</section>
 				</div>
 				<?php
+	}
+
+	private static function catalog_price_details(array $product): void
+	{
+		$details = json_decode((string) ($product['price_details'] ?? ''), true);
+		$plans = is_array($details['plans'] ?? null) ? $details['plans'] : array();
+		if ($plans) {
+			$parts = array();
+			foreach ($plans as $plan) {
+				if (!is_array($plan)) {
+					continue;
+				}
+				$name = sanitize_text_field((string) ($plan['name'] ?? $plan['key'] ?? ''));
+				$cost = (float) ($plan['monthly_cost'] ?? 0);
+				$parts[] = $name . ': ' . (0.0 === $cost ? '0' : number_format_i18n($cost));
+			}
+			echo esc_html(implode(' | ', array_filter($parts)));
+			return;
+		}
+
+		echo esc_html((string) ($product['description'] ?? '—'));
 	}
 
 	private static function source_card(string $title, string $url, array $status): void
